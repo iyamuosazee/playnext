@@ -1,0 +1,9 @@
+{
+  "name":"PlayNext",
+  "short_name":"PlayNext",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#07120d",
+  "theme_color":"#07120d",
+  "description":"Winner-stays football queue manager."
+}
