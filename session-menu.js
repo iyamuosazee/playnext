@@ -23,3 +23,12 @@
     }
   };
 })();
+
+(()=>{
+  if(!document.querySelector('link[href="competition.css"]')){
+    const link=document.createElement('link');link.rel='stylesheet';link.href='competition.css';document.head.appendChild(link);
+  }
+  if(!document.querySelector('script[src="competition.js"]')){
+    const script=document.createElement('script');script.src='competition.js';document.body.appendChild(script);
+  }
+})();
