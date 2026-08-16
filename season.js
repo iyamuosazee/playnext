@@ -81,5 +81,5 @@
   }
   async function recordGoal(playerName,eventId){if(!season)await restore();if(!season||!roomCode||!playerName)return toast('Goal saved live; season sync will retry');try{await rpc('record_season_goal',{p_season_id:season.id,p_access_token:season.token,p_session_code:roomCode,p_player_name:playerName,p_event_id:eventId});await loadPlayers()}catch{toast('Goal saved live; season sync will retry')}}
   async function undoGoal(eventId){if(!season||!eventId)return;try{await rpc('undo_season_goal',{p_season_id:season.id,p_access_token:season.token,p_event_id:eventId});await loadPlayers()}catch{toast('Live undo worked, but season sync failed')}}
-  window.PlayNextSeason={recordGoal,undoGoal,openLeaderboard};inject();restore().then(()=>{renderSeasonCard();addLiveButton()});
+  window.PlayNextSeason={recordGoal,undoGoal,openLeaderboard,syncPendingGoals};inject();restore().then(()=>{renderSeasonCard();addLiveButton()});
 })();
