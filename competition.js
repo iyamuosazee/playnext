@@ -49,15 +49,17 @@
     $('scorerList').querySelectorAll('button').forEach(b=>b.onclick=()=>chooseScorer(b.dataset.player||null));pauseClock();$('scorerModal').classList.remove('hidden');
   }
   function chooseScorer(id){
-    selectedScorerId=id;$('scorerModal').classList.add('hidden');const index=scoringTeamIndex;scoringTeamIndex=null;openConfirm('goal',index);
-    if(id)E.confirmText.textContent=`${playerById(id).name} scored. The match ends immediately; winner stays.`;
+    if(processing||scoringTeamIndex===null)return;
+    selectedScorerId=id;$('scorerModal').classList.add('hidden');const index=scoringTeamIndex;scoringTeamIndex=null;
+    processing=true;setControlsDisabled(true);
+    try{goal(index)}finally{setTimeout(()=>{processing=false;setControlsDisabled(false);render()},1200)}
   }
 
   function openLeaderboard(board){
     ensureState();document.querySelectorAll('.leader-tab').forEach(x=>x.classList.toggle('active',x.dataset.board===board));const target=$('leaderboardContent');
     if(board==='players'){
-      const rows=[...state.players].sort((a,b)=>(b.goals||0)-(a.goals||0)||(b.wins||0)-(a.wins||0)||a.name.localeCompare(b.name));
-      target.innerHTML=rows.length?`<table class="leader-table"><thead><tr><th>#</th><th>Player</th><th>GP</th><th>G</th><th>W</th><th>D</th><th>L</th></tr></thead><tbody>${rows.map((p,i)=>`<tr><td class="rank">${i+1}</td><td class="team-cell"><strong>${esc(p.name)}</strong><small>${esc(byId(p.currentTeamId)?.name||'Not currently assigned')}</small></td><td>${p.games||0}</td><td>${p.goals||0}</td><td>${p.wins||0}</td><td>${p.draws||0}</td><td>${p.losses||0}</td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No player records yet.</div>';
+      const rows=[...state.players].sort((a,b)=>(b.goals||0)-(a.goals||0)||a.name.localeCompare(b.name));
+      target.innerHTML=rows.length?`<table class="leader-table"><thead><tr><th>#</th><th>Player</th><th>Goals</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${rows.findIndex(x=>(x.goals||0)===(p.goals||0))+1}</td><td class="team-cell"><strong>${esc(p.name)}</strong><small>${esc(byId(p.currentTeamId)?.name||'Not currently assigned')}</small></td><td><strong>${p.goals||0}</strong></td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No player records yet.</div>';
     }else{
       const rows=[...state.teams].sort((a,b)=>points(b)-points(a)||(b.wins||0)-(a.wins||0)||goalDiff(b)-goalDiff(a)||a.name.localeCompare(b.name));
       target.innerHTML=`<table class="leader-table"><thead><tr><th>#</th><th>Team</th><th>GP</th><th>W</th><th>D</th><th>L</th><th>PTS</th></tr></thead><tbody>${rows.map((t,i)=>`<tr><td class="rank">${i+1}</td><td class="team-cell"><strong>${esc(t.name)}${t.active?'':' <span class="inactive-badge">OUT</span>'}</strong><small>Goal diff ${goalDiff(t)>=0?'+':''}${goalDiff(t)}</small></td><td>${t.games||0}</td><td>${t.wins||0}</td><td>${t.draws||0}</td><td>${t.losses||0}</td><td><strong>${points(t)}</strong></td></tr>`).join('')}</tbody></table>`;
@@ -95,9 +97,8 @@
 
   snap=function(){ensureState();state.snapshots.push(JSON.stringify({teams:state.teams,queue:state.queue,playing:state.playing,history:state.history,players:state.players,newTeamPriority:state.newTeamPriority||[]}));if(state.snapshots.length>20)state.snapshots.shift()};
   const oldGoal=goal;goal=function(index){
-    ensureState();const winner=state.playing[index],loser=state.playing[1-index],wp=teamPlayers(winner),lp=teamPlayers(loser),scorer=selectedScorerId?playerById(selectedScorerId):null;oldGoal(index);loser.losses=(loser.losses||0)+1;winner.goalsFor=(winner.goalsFor||0)+1;loser.goalsAgainst=(loser.goalsAgainst||0)+1;wp.forEach(p=>{p.games++;p.wins++});lp.forEach(p=>{p.games++;p.losses++});if(scorer)scorer.goals++;if(state.history[0]?.type==='win'){state.history[0].scorerId=scorer?.id||null;state.history[0].scorer=scorer?.name||null}selectedScorerId=null;render();push();
+    ensureState();const winner=state.playing[index],loser=state.playing[1-index],scorer=selectedScorerId?playerById(selectedScorerId):null;oldGoal(index);loser.losses=(loser.losses||0)+1;winner.goalsFor=(winner.goalsFor||0)+1;loser.goalsAgainst=(loser.goalsAgainst||0)+1;if(scorer)scorer.goals++;if(state.history[0]?.type==='win'){state.history[0].scorerId=scorer?.id||null;state.history[0].scorer=scorer?.name||null}selectedScorerId=null;render();push();
   };
-  const oldDraw=draw;draw=function(){ensureState();if(state.queue.length<2)return oldDraw();const players=state.playing.flatMap(teamPlayers);oldDraw();players.forEach(p=>{p.games++;p.draws++});render();push()};
   const oldRender=render;render=function(){ensureState();oldRender()};
   const oldHistoryClick=E.history.onclick;E.history.onclick=()=>{oldHistoryClick();E.historyList.querySelectorAll('.history-item').forEach((row,i)=>{const h=state.history[i];if(h?.type==='win'&&h.scorer){const detail=row.querySelector('span');detail.textContent=`${h.scorer} scored at ${h.time}`}})};
 
