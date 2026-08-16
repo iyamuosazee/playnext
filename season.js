@@ -39,8 +39,8 @@
   }
   function renderSeasonCard(){
     const body=document.getElementById('seasonCardBody');if(!body)return;
-    body.innerHTML=season?`<div class="season-summary"><div><strong>${esc(season.name)}</strong><small>Player goals carry over every Sunday</small></div><div class="season-card-actions"><button id="homeSeasonBoard" class="secondary-btn">View table</button><button id="homeMatchdays" class="secondary-btn">Match Days</button><button id="newRecoveryCode" class="secondary-btn">Replace recovery code</button></div></div>`:'<p class="season-empty">Create a season to keep player goal totals from week to week.</p><div class="season-card-actions"><button id="homeCreateSeason" class="secondary-btn">Create a season</button><button id="homeRestoreSeason" class="secondary-btn">Restore season</button></div>';
-    document.getElementById('homeSeasonBoard')?.addEventListener('click',openLeaderboard);document.getElementById('homeMatchdays')?.addEventListener('click',openArchive);document.getElementById('homeCreateSeason')?.addEventListener('click',()=>show('createSeasonModal'));document.getElementById('homeRestoreSeason')?.addEventListener('click',()=>show('restoreSeasonModal'));document.getElementById('newRecoveryCode')?.addEventListener('click',()=>{if(confirm('Replace the current recovery code? The previous code will stop working.'))generateRecoveryCode()});
+    body.innerHTML=season?`<div class="season-summary"><div><strong>${esc(season.name)}</strong><small>Player goals carry over every Sunday</small></div><div class="season-card-actions"><button id="homeSeasonBoard" class="secondary-btn">View table</button><button id="homePlayers" class="secondary-btn">Players</button><button id="homeMatchdays" class="secondary-btn">Match Days</button><button id="newRecoveryCode" class="secondary-btn">Replace recovery code</button></div></div>`:'<p class="season-empty">Create a season to keep player goal totals from week to week.</p><div class="season-card-actions"><button id="homeCreateSeason" class="secondary-btn">Create a season</button><button id="homeRestoreSeason" class="secondary-btn">Restore season</button></div>';
+    document.getElementById('homeSeasonBoard')?.addEventListener('click',openLeaderboard);document.getElementById('homePlayers')?.addEventListener('click',openPlayerManager);document.getElementById('homeMatchdays')?.addEventListener('click',openArchive);document.getElementById('homeCreateSeason')?.addEventListener('click',()=>show('createSeasonModal'));document.getElementById('homeRestoreSeason')?.addEventListener('click',()=>show('restoreSeasonModal'));document.getElementById('newRecoveryCode')?.addEventListener('click',()=>{if(confirm('Replace the current recovery code? The previous code will stop working.'))generateRecoveryCode()});
   }
   function addLiveButton(){
     if(document.getElementById('seasonGoalsBtn')){document.getElementById('seasonGoalsBtn').style.display=state.seasonId?'':'none';return}
@@ -68,13 +68,36 @@
   }
   async function loadPlayers(){
     if(!season)return;
-    try{players=await rpc('get_season_players',{p_season_id:season.id,p_access_token:season.token})||[];const list=document.getElementById('seasonPlayerOptions');if(list)list.innerHTML=players.map(p=>`<option value="${esc(p.player_name)}"></option>`).join('');decoratePlayerInputs()}catch{}
+    try{players=await rpc('get_season_players',{p_season_id:season.id,p_access_token:season.token})||[];const list=document.getElementById('seasonPlayerOptions');if(list)list.innerHTML=players.filter(p=>p.is_active!==false).map(p=>`<option value="${esc(p.player_name)}"></option>`).join('');decoratePlayerInputs()}catch{}
   }
   function decoratePlayerInputs(){document.querySelectorAll('.player-name-input,.edit-player-row input,.live-player-input').forEach(input=>input.setAttribute('list','seasonPlayerOptions'))}
   async function openLeaderboard(){
     const id=state.seasonId||season?.id;if(!id)return show('createSeasonModal');
     const target=document.getElementById('seasonBoardContent');target.innerHTML='<div class="empty-state">Loading…</div>';show('seasonBoardModal');
     try{await syncPendingGoals();const rows=await rpc('get_season_leaderboard',{p_season_id:id})||[];document.getElementById('seasonBoardTitle').textContent=state.seasonName||season?.name||'Season goals';target.innerHTML=rows.length?`<table class="leader-table season-leader-table"><thead><tr><th>#</th><th>Player</th><th>Match Days</th><th>Goals</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${rows.findIndex(x=>x.goals===p.goals)+1}</td><td><strong>${esc(p.player_name)}</strong></td><td>${p.match_days||0}</td><td><strong>${p.goals}</strong></td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No season goals recorded yet.</div>'}catch{target.innerHTML='<div class="empty-state">Could not load the season table.</div>'}
+  }
+  function setupPlayerManager(){
+    if(document.getElementById('playerManagerModal'))return;
+    document.body.insertAdjacentHTML('beforeend','<div id="playerManagerModal" class="modal-backdrop hidden"><div class="modal-card competition-card player-manager-card"><div class="sheet-head"><div><div class="eyebrow">SEASON ROSTER</div><h3>Players</h3></div><button id="closePlayerManager" class="icon-btn">×</button></div><p class="player-manager-intro">Manage the permanent player records used across every Match Day.</p><div class="player-add-row"><input id="newSeasonPlayer" maxlength="24" autocomplete="off" placeholder="Add a new player"><button id="addSeasonPlayer" class="primary-btn compact">Add</button></div><div id="playerManagerList"></div></div></div>');
+    const style=document.createElement('style');style.textContent='.player-manager-card{width:min(100%,460px)}.player-manager-intro{margin:-4px 0 16px;color:var(--muted);font-size:11px;line-height:1.5}.player-add-row{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:18px}.player-add-row input{min-width:0;background:#101c17;border:1px solid var(--line);border-radius:10px;color:var(--text);padding:12px;font:inherit}.player-manager-section-title{margin:17px 0 8px;color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.12em}.player-manager-list{display:grid;gap:7px}.player-manager-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:11px;border:1px solid var(--line);border-radius:12px}.player-manager-row.inactive{opacity:.66}.player-manager-row strong,.player-manager-row small{display:block}.player-manager-row strong{font-size:12px}.player-manager-row small{margin-top:3px;color:var(--muted);font-size:9px}.player-manager-actions{display:flex;gap:5px}.player-manager-actions button{padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--text);font-size:9px;font-weight:800}.player-manager-actions .restore-player{color:var(--accent)}';document.head.appendChild(style);
+    document.getElementById('closePlayerManager').onclick=()=>hide('playerManagerModal');document.getElementById('playerManagerModal').onclick=e=>{if(e.target.id==='playerManagerModal')hide('playerManagerModal')};document.getElementById('addSeasonPlayer').onclick=addManagedPlayer;document.getElementById('newSeasonPlayer').onkeydown=e=>{if(e.key==='Enter')addManagedPlayer()};
+  }
+  async function openPlayerManager(){if(!season)return show('createSeasonModal');show('playerManagerModal');document.getElementById('playerManagerList').innerHTML='<div class="empty-state">Loading players…</div>';await loadPlayers();renderPlayerManager()}
+  function renderPlayerManager(){
+    const target=document.getElementById('playerManagerList');if(!target)return;
+    const section=(title,rows)=>rows.length?`<div class="player-manager-section-title">${title}</div><div class="player-manager-list">${rows.map(p=>`<div class="player-manager-row ${p.is_active===false?'inactive':''}"><div><strong>${esc(p.player_name)}</strong><small>${p.goals||0} goals · ${p.match_days||0} Match Days</small></div><div class="player-manager-actions"><button data-action="rename" data-id="${p.player_id}" data-name="${esc(p.player_name)}">Rename</button><button class="${p.is_active===false?'restore-player':''}" data-action="${p.is_active===false?'restore':'deactivate'}" data-id="${p.player_id}">${p.is_active===false?'Restore':'Inactive'}</button></div></div>`).join('')}</div>`:'';
+    const active=players.filter(p=>p.is_active!==false),inactive=players.filter(p=>p.is_active===false);target.innerHTML=section(`ACTIVE · ${active.length}`,active)+section(`INACTIVE · ${inactive.length}`,inactive)||'<div class="empty-state">No players added yet.</div>';
+    target.querySelectorAll('button[data-action]').forEach(button=>button.onclick=()=>handleManagedPlayer(button));
+  }
+  async function runPlayerAction(action,id,name){
+    try{await rpc('manage_season_player',{p_season_id:season.id,p_access_token:season.token,p_action:action,p_player_id:id||null,p_player_name:name||null});await loadPlayers();renderPlayerManager();toast(action==='deactivate'?'Player marked inactive':action==='restore'?'Player restored':action==='rename'?'Player renamed':'Player added');return true}catch(error){toast(String(error?.message||'Could not update player').includes('duplicate')?'That player already exists':'Could not update player');return false}
+  }
+  async function addManagedPlayer(){const input=document.getElementById('newSeasonPlayer'),name=input.value.trim();if(!name)return toast('Enter a player name');const button=document.getElementById('addSeasonPlayer');button.disabled=true;if(await runPlayerAction('add',null,name))input.value='';button.disabled=false}
+  async function handleManagedPlayer(button){
+    const action=button.dataset.action,id=button.dataset.id,current=button.dataset.name;
+    if(action==='rename'){const name=prompt('Enter the player’s new name',current);if(name===null||!name.trim()||name.trim()===current)return;button.disabled=true;await runPlayerAction('rename',id,name.trim());button.disabled=false;return}
+    if(action==='deactivate'&&!confirm('Mark this player inactive? Their statistics and Match Day history will remain saved.'))return;
+    button.disabled=true;await runPlayerAction(action,id,null);button.disabled=false;
   }
   const matchdayDate=value=>new Date(`${value}T12:00:00`).toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'});
   const scorerSummary=history=>{
@@ -113,7 +136,7 @@
       const menu=document.getElementById('seasonPlayerSuggestions');if(!menu||!season||!players.length)return close();
       const query=input.value.trim().toLocaleLowerCase();
       const used=new Set([...document.querySelectorAll('.player-name-input,.edit-player-row input,.live-player-input')].filter(x=>x!==input).map(x=>x.value.trim().toLocaleLowerCase()).filter(Boolean));
-      const matches=players.filter(p=>{const name=String(p.player_name||'');return name.toLocaleLowerCase().includes(query)&&!used.has(name.toLocaleLowerCase())}).slice(0,7);
+      const matches=players.filter(p=>{const name=String(p.player_name||'');return p.is_active!==false&&name.toLocaleLowerCase().includes(query)&&!used.has(name.toLocaleLowerCase())}).slice(0,7);
       if(!matches.length)return close();
       menu.innerHTML=`<div class="player-suggestions-label">RETURNING PLAYERS</div>${matches.map(p=>`<button type="button" role="option" data-name="${esc(p.player_name)}"><span>${esc(p.player_name)}</span><small>Select player</small></button>`).join('')}`;
       const rect=input.getBoundingClientRect(),spaceBelow=innerHeight-rect.bottom,menuHeight=Math.min(250,35+matches.length*45),above=spaceBelow<menuHeight&&rect.top>spaceBelow;
@@ -126,5 +149,5 @@
     });
     new MutationObserver(decorate).observe(document.body,{childList:true,subtree:true});decorate();
   }
-  window.PlayNextSeason={recordGoal,undoGoal,openLeaderboard,syncPendingGoals};inject();setupReturningPlayerSuggestions();restore().then(()=>{renderSeasonCard();addLiveButton()});
+  window.PlayNextSeason={recordGoal,undoGoal,openLeaderboard,syncPendingGoals};inject();setupPlayerManager();setupReturningPlayerSuggestions();restore().then(()=>{renderSeasonCard();addLiveButton()});
 })();
