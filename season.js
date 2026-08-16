@@ -1,7 +1,7 @@
 (()=>{
   const KEY='playnext-season';
   const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-  let season=null,players=[];
+  let season=null,players=[],archiveRows=[];
   function saved(){try{return JSON.parse(localStorage.getItem(KEY)||'null')}catch{return null}}
   function persist(value){season=value;value?localStorage.setItem(KEY,JSON.stringify(value)):localStorage.removeItem(KEY);renderSeasonCard()}
   async function rpc(name,args){const {data,error}=await sb.rpc(name,args);if(error)throw error;return data}
@@ -12,6 +12,7 @@
     if(document.getElementById('seasonCard'))return;
     E.home.querySelector('.join-panel')?.insertAdjacentHTML('afterend','<div id="seasonCard" class="panel season-card"><div class="section-head"><div><span class="step">SEASON</span><h2>Player Records</h2></div></div><div id="seasonCardBody"></div></div>');
     document.body.insertAdjacentHTML('beforeend',`<datalist id="seasonPlayerOptions"></datalist><div id="createSeasonModal" class="modal-backdrop hidden"><div class="modal-card season-modal"><div class="eyebrow">NEW SEASON</div><h3>Track goals every Sunday</h3><p>Players keep one profile even when their teammates change.</p><label class="season-label"><span>Season name</span><input id="seasonNameInput" maxlength="50" value="${new Date().getFullYear()} Sunday Football"></label><button id="confirmCreateSeason" class="primary-btn full-btn">Create season</button><button id="skipSeason" class="secondary-btn full-btn">Play without season</button></div></div><div id="restoreSeasonModal" class="modal-backdrop hidden"><div class="modal-card season-modal"><div class="eyebrow">RESTORE SEASON</div><h3>Enter recovery code</h3><p>Use the private code saved when the season was created.</p><label class="season-label"><span>Recovery code</span><input id="restoreCodeInput" maxlength="19" autocapitalize="characters" placeholder="PN-XXXX-XXXX-XXXX"></label><button id="confirmRestoreSeason" class="primary-btn full-btn">Restore season</button><button id="cancelRestoreSeason" class="secondary-btn full-btn">Cancel</button></div></div><div id="recoveryCodeModal" class="modal-backdrop hidden"><div class="modal-card season-modal"><div class="eyebrow">PRIVATE RECOVERY CODE</div><h3>Save this code</h3><p>It restores host access on another phone or after clearing browser data. Keep it private.</p><div id="recoveryCodeValue" class="recovery-code">—</div><button id="copyRecoveryCode" class="primary-btn full-btn">Copy recovery code</button><button id="closeRecoveryCode" class="secondary-btn full-btn">Done</button></div></div><div id="seasonBoardModal" class="modal-backdrop hidden"><div class="modal-card competition-card"><div class="sheet-head"><div><div class="eyebrow">ALL SUNDAYS</div><h3 id="seasonBoardTitle">Season goals</h3></div><button id="closeSeasonBoard" class="icon-btn">×</button></div><div id="seasonBoardContent"></div></div></div>`);
+    document.body.insertAdjacentHTML('beforeend','<div id="matchdayArchiveModal" class="modal-backdrop hidden"><div class="modal-card competition-card archive-card"><div id="matchdayArchiveContent"></div></div></div>');
     document.getElementById('confirmCreateSeason').onclick=createSeason;
     document.getElementById('skipSeason').onclick=()=>{hide('createSeasonModal');screen(E.setup)};
     document.getElementById('closeSeasonBoard').onclick=()=>hide('seasonBoardModal');
@@ -20,6 +21,7 @@
     document.getElementById('closeRecoveryCode').onclick=()=>hide('recoveryCodeModal');
     document.getElementById('copyRecoveryCode').onclick=copyRecoveryCode;
     document.getElementById('restoreCodeInput').oninput=e=>e.target.value=e.target.value.toUpperCase();
+    document.getElementById('matchdayArchiveModal').addEventListener('click',e=>{if(e.target.id==='matchdayArchiveModal')hide('matchdayArchiveModal')});
     const oldHost=E.host.onclick;
     E.host.onclick=async()=>{if(!season)return show('createSeasonModal');await loadPlayers();oldHost()};
     const oldStart=E.start.onclick;
@@ -37,8 +39,8 @@
   }
   function renderSeasonCard(){
     const body=document.getElementById('seasonCardBody');if(!body)return;
-    body.innerHTML=season?`<div class="season-summary"><div><strong>${esc(season.name)}</strong><small>Player goals carry over every Sunday</small></div><div class="season-card-actions"><button id="homeSeasonBoard" class="secondary-btn">View table</button><button id="newRecoveryCode" class="secondary-btn">Replace recovery code</button></div></div>`:'<p class="season-empty">Create a season to keep player goal totals from week to week.</p><div class="season-card-actions"><button id="homeCreateSeason" class="secondary-btn">Create a season</button><button id="homeRestoreSeason" class="secondary-btn">Restore season</button></div>';
-    document.getElementById('homeSeasonBoard')?.addEventListener('click',openLeaderboard);document.getElementById('homeCreateSeason')?.addEventListener('click',()=>show('createSeasonModal'));document.getElementById('homeRestoreSeason')?.addEventListener('click',()=>show('restoreSeasonModal'));document.getElementById('newRecoveryCode')?.addEventListener('click',()=>{if(confirm('Replace the current recovery code? The previous code will stop working.'))generateRecoveryCode()});
+    body.innerHTML=season?`<div class="season-summary"><div><strong>${esc(season.name)}</strong><small>Player goals carry over every Sunday</small></div><div class="season-card-actions"><button id="homeSeasonBoard" class="secondary-btn">View table</button><button id="homeMatchdays" class="secondary-btn">Match Days</button><button id="newRecoveryCode" class="secondary-btn">Replace recovery code</button></div></div>`:'<p class="season-empty">Create a season to keep player goal totals from week to week.</p><div class="season-card-actions"><button id="homeCreateSeason" class="secondary-btn">Create a season</button><button id="homeRestoreSeason" class="secondary-btn">Restore season</button></div>';
+    document.getElementById('homeSeasonBoard')?.addEventListener('click',openLeaderboard);document.getElementById('homeMatchdays')?.addEventListener('click',openArchive);document.getElementById('homeCreateSeason')?.addEventListener('click',()=>show('createSeasonModal'));document.getElementById('homeRestoreSeason')?.addEventListener('click',()=>show('restoreSeasonModal'));document.getElementById('newRecoveryCode')?.addEventListener('click',()=>{if(confirm('Replace the current recovery code? The previous code will stop working.'))generateRecoveryCode()});
   }
   function addLiveButton(){
     if(document.getElementById('seasonGoalsBtn')){document.getElementById('seasonGoalsBtn').style.display=state.seasonId?'':'none';return}
@@ -73,6 +75,26 @@
     const id=state.seasonId||season?.id;if(!id)return show('createSeasonModal');
     const target=document.getElementById('seasonBoardContent');target.innerHTML='<div class="empty-state">Loading…</div>';show('seasonBoardModal');
     try{await syncPendingGoals();const rows=await rpc('get_season_leaderboard',{p_season_id:id})||[];document.getElementById('seasonBoardTitle').textContent=state.seasonName||season?.name||'Season goals';target.innerHTML=rows.length?`<table class="leader-table season-leader-table"><thead><tr><th>#</th><th>Player</th><th>Match Days</th><th>Goals</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${rows.findIndex(x=>x.goals===p.goals)+1}</td><td><strong>${esc(p.player_name)}</strong></td><td>${p.match_days||0}</td><td><strong>${p.goals}</strong></td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No season goals recorded yet.</div>'}catch{target.innerHTML='<div class="empty-state">Could not load the season table.</div>'}
+  }
+  const matchdayDate=value=>new Date(`${value}T12:00:00`).toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  const scorerSummary=history=>{
+    const counts={};(history||[]).forEach(h=>{if(h.scorer)counts[h.scorer]=(counts[h.scorer]||0)+1});
+    const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));if(!sorted.length)return {label:'No goals assigned',goals:0};
+    const top=sorted[0][1],names=sorted.filter(x=>x[1]===top).map(x=>x[0]);return {label:names.join(' · '),goals:top};
+  };
+  async function openArchive(){
+    const id=state.seasonId||season?.id;if(!id)return show('createSeasonModal');
+    const target=document.getElementById('matchdayArchiveContent');target.innerHTML='<div class="empty-state">Loading match days…</div>';show('matchdayArchiveModal');
+    try{archiveRows=await rpc('get_matchday_archive',{p_season_id:id})||[];renderArchive()}catch{target.innerHTML='<div class="sheet-head"><h3>Match Days</h3><button id="closeArchive" class="icon-btn">×</button></div><div class="empty-state">Could not load match days.</div>';document.getElementById('closeArchive').onclick=()=>hide('matchdayArchiveModal')}
+  }
+  function renderArchive(){
+    const target=document.getElementById('matchdayArchiveContent');target.innerHTML=`<div class="sheet-head"><div><div class="eyebrow">SEASON ARCHIVE</div><h3>Match Days</h3></div><button id="closeArchive" class="icon-btn">×</button></div>${archiveRows.length?`<div class="archive-list">${archiveRows.map((row,i)=>{const s=row.snapshot||{},history=s.history||[],top=scorerSummary(history);return `<button class="archive-row" data-index="${i}"><span><strong>${matchdayDate(row.played_on)}</strong><small>${(s.players||[]).length} players · ${history.length} matches</small></span><span><b>${top.label}</b><small>${top.goals?`${top.goals} goal${top.goals===1?'':'s'}`:row.matchday_status==='active'?'In progress':'Completed'}</small></span></button>`}).join('')}</div>`:'<div class="empty-state">Completed match days will appear here.</div>'}`;
+    document.getElementById('closeArchive').onclick=()=>hide('matchdayArchiveModal');target.querySelectorAll('.archive-row').forEach(b=>b.onclick=()=>renderArchiveDetails(+b.dataset.index));
+  }
+  function renderArchiveDetails(index){
+    const row=archiveRows[index],s=row.snapshot||{},players=s.players||[],teams=[...(s.teams||[])].sort((a,b)=>(b.wins||0)-(a.wins||0)||(b.draws||0)-(a.draws||0)),history=[...(s.history||[])].reverse(),top=scorerSummary(s.history||[]),target=document.getElementById('matchdayArchiveContent');
+    target.innerHTML=`<div class="archive-detail-head"><button id="backArchive" class="mini-btn">← Match Days</button><button id="closeArchive" class="icon-btn">×</button></div><div class="eyebrow">${row.matchday_status==='active'?'IN PROGRESS':'COMPLETED'}</div><h3>${matchdayDate(row.played_on)}</h3><div class="archive-stats"><div><span>PLAYERS</span><strong>${players.length}</strong></div><div><span>MATCHES</span><strong>${history.length}</strong></div><div><span>TOP SCORER</span><strong>${esc(top.label)}</strong><small>${top.goals||0} goals</small></div></div><div class="archive-section"><h4>Players</h4><div class="archive-players">${players.map(p=>`<span>${esc(p.name)}</span>`).join('')||'<small>No roster saved</small>'}</div></div><div class="archive-section"><h4>Team standings</h4>${teams.length?`<table class="leader-table"><thead><tr><th>#</th><th>Team</th><th>GP</th><th>W</th><th>D</th><th>L</th></tr></thead><tbody>${teams.map((t,i)=>`<tr><td class="rank">${i+1}</td><td><strong>${esc(t.name)}</strong><small class="archive-team-players">${(t.players||[]).map(esc).join(' · ')}</small></td><td>${t.games||0}</td><td>${t.wins||0}</td><td>${t.draws||0}</td><td>${t.losses||0}</td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No team data saved.</div>'}</div><div class="archive-section"><h4>Results</h4><div class="archive-results">${history.map((h,i)=>h.type==='win'?`<div><span>${i+1}</span><p><strong>${esc(h.winner)} beat ${esc(h.loser)}</strong><small>${h.scorer?`${esc(h.scorer)} scored`: 'Unassigned goal'} · ${esc(h.time)}</small></p></div>`:`<div><span>${i+1}</span><p><strong>${esc(h.a)} vs ${esc(h.b)} · Draw</strong><small>0–0 after ${esc(h.time)}</small></p></div>`).join('')||'<div class="empty-state">No completed matches.</div>'}</div></div>`;
+    document.getElementById('backArchive').onclick=renderArchive;document.getElementById('closeArchive').onclick=()=>hide('matchdayArchiveModal');
   }
   async function syncPendingGoals(){
     if(!season||!roomCode||state.seasonId!==season.id||role!=='host')return;
