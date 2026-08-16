@@ -1,5 +1,5 @@
 (()=>{
-  let selectedScorerId=null,scoringTeamIndex=null,editingTeamId=null;
+  let selectedScorerId=null,scoringTeamIndex=null,editingTeamId=null,correctingHistoryIndex=null;
   const uid=()=>crypto.randomUUID();
   const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const byId=id=>(state.teams||[]).find(t=>t.id===id);
@@ -37,7 +37,7 @@
       <div id="editPlayersModal" class="modal-backdrop hidden"><div class="modal-card competition-card"><div class="eyebrow">LIVE ROSTER</div><h3 id="editPlayersTitle">Edit players</h3><p>Changes apply to future matches. Existing player statistics stay logged.</p><div id="editPlayerList" class="player-editor-list"></div><button id="addPlayerField" class="secondary-btn full-btn">+ Add player</button><p class="editor-note">Player names must be unique in this session.</p><div class="modal-actions"><button id="cancelEditPlayers" class="secondary-btn">Cancel</button><button id="savePlayers" class="primary-btn compact">Save players</button></div></div></div>`);
     $('leaderboardBtn').onclick=()=>openLeaderboard('teams');$('manageTeamsBtn').onclick=openManageTeams;
     $('closeLeaderboard').onclick=()=>$('leaderboardModal').classList.add('hidden');$('closeManageTeams').onclick=()=>$('manageTeamsModal').classList.add('hidden');
-    $('cancelScorer').onclick=()=>{scoringTeamIndex=null;$('scorerModal').classList.add('hidden');if(state.remaining>0&&!state.running)startClock()};
+    $('cancelScorer').onclick=()=>{const wasCorrection=correctingHistoryIndex!==null;scoringTeamIndex=null;correctingHistoryIndex=null;$('scorerModal').classList.add('hidden');if(!wasCorrection&&state.remaining>0&&!state.running)startClock()};
     $('cancelEditPlayers').onclick=()=>$('editPlayersModal').classList.add('hidden');$('addPlayerField').onclick=()=>addPlayerField('');$('savePlayers').onclick=savePlayers;
     document.querySelectorAll('.leader-tab').forEach(b=>b.onclick=()=>openLeaderboard(b.dataset.board));
   }
@@ -49,10 +49,15 @@
     $('scorerList').querySelectorAll('button').forEach(b=>b.onclick=()=>chooseScorer(b.dataset.player||null));pauseClock();$('scorerModal').classList.remove('hidden');
   }
   function chooseScorer(id){
-    if(processing||scoringTeamIndex===null)return;
+    if(processing)return;
+    if(correctingHistoryIndex!==null){const historyIndex=correctingHistoryIndex,entry=state.history[historyIndex],next=playerById(id),previous=playerById(entry?.scorerId);if(!entry||!next)return;correctingHistoryIndex=null;$('scorerModal').classList.add('hidden');if(previous?.id===next.id)return;if(previous)previous.goals=Math.max(0,(previous.goals||0)-1);next.goals=(next.goals||0)+1;entry.scorerId=next.id;entry.scorer=next.name;render();push();window.PlayNextSeason?.correctGoal(next.name,entry.seasonEventId);toast(`Goalscorer changed to ${next.name}`);return}
+    if(scoringTeamIndex===null)return;
     selectedScorerId=id;$('scorerModal').classList.add('hidden');const index=scoringTeamIndex;scoringTeamIndex=null;
     processing=true;setControlsDisabled(true);
     try{goal(index)}finally{setTimeout(()=>{processing=false;setControlsDisabled(false);render()},1200)}
+  }
+  function correctScorer(historyIndex){
+    if(role!=='host')return;ensureState();const entry=state.history[historyIndex],team=state.teams.find(t=>t.name===entry?.winner);if(!entry?.seasonEventId||!team)return toast('This goalscorer cannot be changed');const choices=teamPlayers(team);if(!choices.length)return toast('No players are listed for that team');correctingHistoryIndex=historyIndex;$('scorerTitle').textContent=`Correct ${entry.winner} goalscorer`;$('scorerList').innerHTML=choices.map(p=>`<button class="scorer-option" data-player="${p.id}"><span>${esc(p.name)}</span><small>${p.id===entry.scorerId?'Currently selected':`${p.goals||0} goals`}</small></button>`).join('');$('scorerList').querySelectorAll('button').forEach(b=>b.onclick=()=>chooseScorer(b.dataset.player));$('scorerModal').classList.remove('hidden');E.sheet.classList.add('hidden')
   }
 
   function openLeaderboard(board){
@@ -100,7 +105,7 @@
     ensureState();const winner=state.playing[index],loser=state.playing[1-index],scorer=selectedScorerId?playerById(selectedScorerId):null,eventId=scorer?uid():null;oldGoal(index);loser.losses=(loser.losses||0)+1;winner.goalsFor=(winner.goalsFor||0)+1;loser.goalsAgainst=(loser.goalsAgainst||0)+1;if(scorer)scorer.goals++;if(state.history[0]?.type==='win'){state.history[0].scorerId=scorer?.id||null;state.history[0].scorer=scorer?.name||null;state.history[0].seasonEventId=eventId}if(scorer&&eventId)window.PlayNextSeason?.recordGoal(scorer.name,eventId);selectedScorerId=null;render();push();
   };
   const oldRender=render;render=function(){ensureState();oldRender()};
-  const oldHistoryClick=E.history.onclick;E.history.onclick=()=>{oldHistoryClick();E.historyList.querySelectorAll('.history-item').forEach((row,i)=>{const h=state.history[i];if(h?.type==='win'&&h.scorer){const detail=row.querySelector('span');detail.textContent=`${h.scorer} scored at ${h.time}`}})};
+  const oldHistoryClick=E.history.onclick;E.history.onclick=()=>{oldHistoryClick();E.historyList.querySelectorAll('.history-item').forEach((row,i)=>{const h=state.history[i];if(h?.type==='win'&&h.scorer){const detail=row.querySelector('span');detail.textContent=`${h.scorer} scored at ${h.time}`;if(role==='host'&&h.seasonEventId){const button=document.createElement('button');button.className='mini-btn correct-scorer';button.textContent='Correct scorer';button.onclick=e=>{e.stopPropagation();correctScorer(i)};row.appendChild(button)}}})};
   const oldUndoClick=E.undo.onclick;E.undo.onclick=()=>{const eventId=state.history?.[0]?.seasonEventId;oldUndoClick();if(eventId)window.PlayNextSeason?.undoGoal(eventId)};
 
   injectUI();ensureState();E.aGoal.onclick=()=>openScorer(0);E.bGoal.onclick=()=>openScorer(1);window.dispatchEvent(new Event('playnext:competition-ready'));

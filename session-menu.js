@@ -5,14 +5,25 @@
   reset.setAttribute('aria-label','Session menu');
   reset.classList.add('session-menu-btn');
 
-  document.body.insertAdjacentHTML('beforeend',`<div id="sessionMenuBackdrop" class="session-menu-backdrop hidden"><div class="session-menu-card"><div class="session-menu-head"><div><div class="eyebrow">PLAYNEXT</div><h3>Session menu</h3></div><button id="closeSessionMenu" class="icon-btn" aria-label="Close menu">×</button></div><button id="menuShare" class="session-menu-item"><span>Share / QR code</span><small>Invite players to this room</small></button><button id="menuAlerts" class="session-menu-item"><span>Match alerts</span><small>Sound and vibration settings</small></button><button id="menuEndMatchday" class="session-menu-item danger-menu"><span>End Match Day</span><small>Close today’s room and preserve season records</small></button><button id="menuLeave" class="session-menu-item danger-menu"><span>Leave session</span><small>Exit this live room</small></button></div></div>`);
+  document.body.insertAdjacentHTML('beforeend',`<div id="sessionMenuBackdrop" class="session-menu-backdrop hidden"><div class="session-menu-card"><div class="session-menu-head"><div><div class="eyebrow">PLAYNEXT</div><h3>Session menu</h3></div><button id="closeSessionMenu" class="icon-btn" aria-label="Close menu">×</button></div><button id="menuShare" class="session-menu-item"><span>Share / QR code</span><small>Invite players to this room</small></button><button id="menuCohost" class="session-menu-item"><span>Invite a co-host</span><small>Share live controls with one trusted person</small></button><button id="menuAlerts" class="session-menu-item"><span>Match alerts</span><small>Sound and vibration settings</small></button><button id="menuEndMatchday" class="session-menu-item danger-menu"><span>End Match Day</span><small>Close today’s room and preserve season records</small></button><button id="menuLeave" class="session-menu-item danger-menu"><span>Leave session</span><small>Exit this live room</small></button></div></div>`);
   const backdrop=document.getElementById('sessionMenuBackdrop');
-  const open=()=>backdrop.classList.remove('hidden');
+  const open=()=>{document.getElementById('menuCohost').style.display=typeof hostKind!=='undefined'&&hostKind==='cohost'?'none':'';document.getElementById('menuEndMatchday').style.display=typeof hostKind!=='undefined'&&hostKind==='cohost'?'none':'';backdrop.classList.remove('hidden')};
   const close=()=>backdrop.classList.add('hidden');
   reset.onclick=open;
   document.getElementById('closeSessionMenu').onclick=close;
   backdrop.addEventListener('click',e=>{if(e.target===backdrop)close()});
   document.getElementById('menuShare').onclick=()=>{close(); if(typeof openShare==='function')openShare()};
+  document.getElementById('menuCohost').onclick=async()=>{
+    if(typeof role==='undefined'||role!=='host'||hostKind!=='primary')return;
+    const button=document.getElementById('menuCohost');button.disabled=true;
+    try{
+      const {data,error}=await sb.rpc('create_cohost_invite',{p_code:roomCode,p_host_token:hostToken});if(error)throw error;
+      const token=Array.isArray(data)?data[0]:data,link=`${location.origin}${location.pathname}?room=${roomCode}&cohost=${token}`;
+      close();
+      if(navigator.share)await navigator.share({title:'PlayNext co-host invitation',text:`Help host PlayNext room ${roomCode}. This private link gives live match controls.`,url:link});
+      else{await navigator.clipboard.writeText(link);toast('Co-host invitation copied')}
+    }catch(error){if(error?.name!=='AbortError')toast('Could not create co-host invitation')}finally{button.disabled=false}
+  };
   document.getElementById('menuAlerts').onclick=()=>{close(); const alertButton=document.getElementById('matchAlertSetting')||document.getElementById('alertSettingsBtn'); if(alertButton)alertButton.click(); else if(typeof toast==='function')toast('Match alerts are controlled from the host alert setting')};
   document.getElementById('menuEndMatchday').onclick=async()=>{
     if(typeof role==='undefined'||role!=='host')return;

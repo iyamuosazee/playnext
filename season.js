@@ -1,7 +1,7 @@
 (()=>{
   const KEY='playnext-season';
   const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-  let season=null,players=[],archiveRows=[],leaderboardRows=[],launchSeasonSetup=null,attendanceIds=new Set(),attendanceInitialized=false;
+  let season=null,players=[],archiveRows=[],leaderboardRows=[],launchSeasonSetup=null,attendanceIds=new Set(),attendanceInitialized=false,goalRetryTimer=null,goalRetryFailures=0,goalSyncing=false;
   function saved(){try{return JSON.parse(localStorage.getItem(KEY)||'null')}catch{return null}}
   function persist(value){season=value;value?localStorage.setItem(KEY,JSON.stringify(value)):localStorage.removeItem(KEY);renderSeasonCard()}
   async function rpc(name,args){const {data,error}=await sb.rpc(name,args);if(error)throw error;return data}
@@ -167,11 +167,15 @@
     teams.forEach((t,i)=>{ctx.strokeStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.moveTo(64,y+39);ctx.lineTo(1016,y+39);ctx.stroke();ctx.fillStyle='#b8ff4f';ctx.font='900 25px Arial';ctx.fillText(String(i+1).padStart(2,'0'),68,y+3);ctx.fillStyle='#ffffff';ctx.font='700 28px Arial';ctx.fillText(fitText(ctx,t.name,500),135,y+3);ctx.textAlign='center';ctx.fillStyle='#c3ccc7';ctx.font='25px Arial';[t.games||0,t.wins||0,t.draws||0,t.losses||0].forEach((v,j)=>ctx.fillText(String(v),765+j*78,y+3));ctx.textAlign='left';y+=70});finishShareCard(ctx,height);shareImage(canvas,'playnext-match-day.png',`PlayNext · ${title}`,'PlayNext Match Day recap')
   }
   async function syncPendingGoals(){
-    if(!season||!roomCode||state.seasonId!==season.id||role!=='host')return;
+    if(!roomCode||!state.seasonId||role!=='host'||goalSyncing||!navigator.onLine)return;
     const pending=(state.history||[]).filter(h=>h.type==='win'&&h.scorer&&h.seasonEventId);
-    for(const h of pending)await rpc('record_season_goal',{p_season_id:season.id,p_access_token:season.token,p_session_code:roomCode,p_player_name:h.scorer,p_event_id:h.seasonEventId});
+    if(!pending.length)return;goalSyncing=true;clearTimeout(goalRetryTimer);goalRetryTimer=null;
+    try{setConnectionStatus?.('syncing');for(const h of pending)await rpc('record_live_season_goal',{p_code:roomCode,p_host_token:hostToken,p_player_name:h.scorer,p_event_id:h.seasonEventId});goalRetryFailures=0;setConnectionStatus?.('online')}
+    catch(error){console.error('PlayNext goal sync failed',error);goalRetryFailures++;setConnectionStatus?.(navigator.onLine?'reconnecting':'offline');goalRetryTimer=setTimeout(syncPendingGoals,Math.min(30000,1200*2**Math.min(goalRetryFailures,5)))}
+    finally{goalSyncing=false}
   }
-  async function recordGoal(playerName,eventId){if(!season)await restore();if(!season||!roomCode||!playerName)return toast('Goal saved live; season sync will retry');try{await rpc('record_season_goal',{p_season_id:season.id,p_access_token:season.token,p_session_code:roomCode,p_player_name:playerName,p_event_id:eventId});await loadPlayers()}catch{toast('Goal saved live; season sync will retry')}}
+  async function recordGoal(playerName,eventId){if(!roomCode||!playerName)return;try{await rpc('record_live_season_goal',{p_code:roomCode,p_host_token:hostToken,p_player_name:playerName,p_event_id:eventId});goalRetryFailures=0;if(season)await loadPlayers()}catch{toast('Goal saved live; season sync will retry');goalRetryTimer=setTimeout(syncPendingGoals,1200)}}
+  async function correctGoal(playerName,eventId){if(!roomCode||!playerName||!eventId)return;try{setConnectionStatus?.('syncing');await rpc('correct_live_season_goal',{p_code:roomCode,p_host_token:hostToken,p_event_id:eventId,p_player_name:playerName});if(season)await loadPlayers();setConnectionStatus?.('online')}catch{toast('Correction saved live; season sync will retry');goalRetryTimer=setTimeout(()=>correctGoal(playerName,eventId),Math.min(30000,1200*2**Math.min(++goalRetryFailures,5)))}}
   async function undoGoal(eventId){if(!season||!eventId)return;try{await rpc('undo_season_goal',{p_season_id:season.id,p_access_token:season.token,p_event_id:eventId});await loadPlayers()}catch{toast('Live undo worked, but season sync failed')}}
   function setupReturningPlayerSuggestions(){
     if(!document.getElementById('seasonPlayerSuggestions')){
@@ -196,5 +200,6 @@
     });
     new MutationObserver(decorate).observe(document.body,{childList:true,subtree:true});decorate();
   }
-  window.PlayNextSeason={recordGoal,undoGoal,openLeaderboard,syncPendingGoals};inject();setupPlayerManager();setupAttendanceSelection();setupReturningPlayerSuggestions();restore().then(()=>{renderSeasonCard();addLiveButton()});
+  window.addEventListener('online',()=>setTimeout(syncPendingGoals,200));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')syncPendingGoals()});
+  window.PlayNextSeason={recordGoal,correctGoal,undoGoal,openLeaderboard,syncPendingGoals};inject();setupPlayerManager();setupAttendanceSelection();setupReturningPlayerSuggestions();restore().then(()=>{renderSeasonCard();addLiveButton()});
 })();
