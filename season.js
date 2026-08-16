@@ -103,5 +103,28 @@
   }
   async function recordGoal(playerName,eventId){if(!season)await restore();if(!season||!roomCode||!playerName)return toast('Goal saved live; season sync will retry');try{await rpc('record_season_goal',{p_season_id:season.id,p_access_token:season.token,p_session_code:roomCode,p_player_name:playerName,p_event_id:eventId});await loadPlayers()}catch{toast('Goal saved live; season sync will retry')}}
   async function undoGoal(eventId){if(!season||!eventId)return;try{await rpc('undo_season_goal',{p_season_id:season.id,p_access_token:season.token,p_event_id:eventId});await loadPlayers()}catch{toast('Live undo worked, but season sync failed')}}
-  window.PlayNextSeason={recordGoal,undoGoal,openLeaderboard,syncPendingGoals};inject();restore().then(()=>{renderSeasonCard();addLiveButton()});
+  function setupReturningPlayerSuggestions(){
+    if(!document.getElementById('seasonPlayerSuggestions')){
+      document.body.insertAdjacentHTML('beforeend','<div id="seasonPlayerSuggestions" class="player-suggestions hidden" role="listbox"></div>');
+      const style=document.createElement('style');style.textContent='.player-suggestions{position:fixed;z-index:1200;max-height:250px;overflow:auto;padding:5px;background:#101c17;border:1px solid #3a4b42;border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,.45)}.player-suggestions-label{padding:7px 9px 5px;color:var(--accent);font-size:8px;font-weight:900;letter-spacing:.14em}.player-suggestions button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:11px 10px;border:0;border-radius:8px;background:transparent;color:var(--text);font:inherit;text-align:left}.player-suggestions button:active,.player-suggestions button:hover{background:rgba(184,255,79,.1)}.player-suggestions button span{font-size:12px;font-weight:800}.player-suggestions button small{color:var(--muted);font-size:9px;white-space:nowrap}';document.head.appendChild(style);
+    }
+    const close=()=>document.getElementById('seasonPlayerSuggestions')?.classList.add('hidden');
+    const showSuggestions=input=>{
+      const menu=document.getElementById('seasonPlayerSuggestions');if(!menu||!season||!players.length)return close();
+      const query=input.value.trim().toLocaleLowerCase();
+      const used=new Set([...document.querySelectorAll('.player-name-input,.edit-player-row input,.live-player-input')].filter(x=>x!==input).map(x=>x.value.trim().toLocaleLowerCase()).filter(Boolean));
+      const matches=players.filter(p=>{const name=String(p.player_name||'');return name.toLocaleLowerCase().includes(query)&&!used.has(name.toLocaleLowerCase())}).slice(0,7);
+      if(!matches.length)return close();
+      menu.innerHTML=`<div class="player-suggestions-label">RETURNING PLAYERS</div>${matches.map(p=>`<button type="button" role="option" data-name="${esc(p.player_name)}"><span>${esc(p.player_name)}</span><small>Select player</small></button>`).join('')}`;
+      const rect=input.getBoundingClientRect(),spaceBelow=innerHeight-rect.bottom,menuHeight=Math.min(250,35+matches.length*45),above=spaceBelow<menuHeight&&rect.top>spaceBelow;
+      menu.style.left=`${Math.max(8,rect.left)}px`;menu.style.width=`${Math.min(rect.width,innerWidth-16)}px`;menu.style.top=above?`${Math.max(8,rect.top-menuHeight-5)}px`:`${rect.bottom+5}px`;menu.classList.remove('hidden');
+      menu.querySelectorAll('button').forEach(button=>button.onpointerdown=e=>{e.preventDefault();input.value=button.dataset.name;input.dispatchEvent(new Event('input',{bubbles:true}));close();input.focus()});
+    };
+    const decorate=()=>document.querySelectorAll('.player-name-input,.edit-player-row input,.live-player-input').forEach(input=>{
+      input.removeAttribute('list');if(input.dataset.seasonSuggest==='1')return;input.dataset.seasonSuggest='1';input.autocomplete='off';
+      input.addEventListener('focus',()=>showSuggestions(input));input.addEventListener('input',()=>showSuggestions(input));input.addEventListener('blur',()=>setTimeout(close,120));input.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+    });
+    new MutationObserver(decorate).observe(document.body,{childList:true,subtree:true});decorate();
+  }
+  window.PlayNextSeason={recordGoal,undoGoal,openLeaderboard,syncPendingGoals};inject();setupReturningPlayerSuggestions();restore().then(()=>{renderSeasonCard();addLiveButton()});
 })();
