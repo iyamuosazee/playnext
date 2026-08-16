@@ -20,15 +20,20 @@
     }).filter(x=>x.name)
   }
   E.start.onclick=async()=>{
+    if(sessionStarting)return;sessionStarting=true;E.start.disabled=true;const originalLabel=E.start.innerHTML;E.start.innerHTML='Starting…';
+    try{
     let entries=setupTeams();
     while(entries.length<4&&E.inputs.children.length<10){addTeam();entries=setupTeams()}
     if(entries.length<4)return toast('Give at least 4 teams a name');
     if(new Set(entries.map(x=>x.name.toLowerCase())).size!==entries.length)return toast('Team names must be unique');
+    const playerNames=entries.flatMap(x=>x.players).map(x=>x.toLocaleLowerCase());
+    if(new Set(playerNames).size!==playerNames.length)return toast('A player can only be assigned to one team');
     state.teams=entries.map(({name,players,i})=>({id:crypto.randomUUID(),name,color:colors[i%colors.length],players,games:0,wins:0,draws:0,streak:0,bestStreak:0}));
     state.playing=state.teams.slice(0,2);state.queue=state.teams.slice(2);state.duration=+E.duration.value;state.remaining=state.duration;state.history=[];state.snapshots=[];startClock(false);
     let {data,error}=await sb.rpc('create_session',{p_name:'Sunday Football',p_duration_seconds:state.duration,p_players_per_team:+E.players.value,p_state:publicState()});
-    if(error)return toast('Could not create room');
-    let r=Array.isArray(data)?data[0]:data;roomCode=r.code;hostToken=r.host_token;role='host';localStorage.setItem('playnext-host',JSON.stringify({roomCode,hostToken}));enterGame();await subscribe();setTimeout(openShare,350)
+    if(error){console.error('PlayNext session creation failed',error);return toast('Could not create room — please try again')}
+    let r=Array.isArray(data)?data[0]:data;roomCode=r.code;hostToken=r.host_token;role='host';localStorage.setItem('playnext-host',JSON.stringify({roomCode,hostToken}));saveHostBackup();enterGame();await subscribe();setTimeout(openShare,350)
+    }finally{sessionStarting=false;E.start.disabled=false;E.start.innerHTML=originalLabel}
   };
   const baseRender=render;
   render=function(){
