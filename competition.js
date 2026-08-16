@@ -97,10 +97,11 @@
 
   snap=function(){ensureState();state.snapshots.push(JSON.stringify({teams:state.teams,queue:state.queue,playing:state.playing,history:state.history,players:state.players,newTeamPriority:state.newTeamPriority||[]}));if(state.snapshots.length>20)state.snapshots.shift()};
   const oldGoal=goal;goal=function(index){
-    ensureState();const winner=state.playing[index],loser=state.playing[1-index],scorer=selectedScorerId?playerById(selectedScorerId):null;oldGoal(index);loser.losses=(loser.losses||0)+1;winner.goalsFor=(winner.goalsFor||0)+1;loser.goalsAgainst=(loser.goalsAgainst||0)+1;if(scorer)scorer.goals++;if(state.history[0]?.type==='win'){state.history[0].scorerId=scorer?.id||null;state.history[0].scorer=scorer?.name||null}selectedScorerId=null;render();push();
+    ensureState();const winner=state.playing[index],loser=state.playing[1-index],scorer=selectedScorerId?playerById(selectedScorerId):null,eventId=scorer?uid():null;oldGoal(index);loser.losses=(loser.losses||0)+1;winner.goalsFor=(winner.goalsFor||0)+1;loser.goalsAgainst=(loser.goalsAgainst||0)+1;if(scorer)scorer.goals++;if(state.history[0]?.type==='win'){state.history[0].scorerId=scorer?.id||null;state.history[0].scorer=scorer?.name||null;state.history[0].seasonEventId=eventId}if(scorer&&eventId)window.PlayNextSeason?.recordGoal(scorer.name,eventId);selectedScorerId=null;render();push();
   };
   const oldRender=render;render=function(){ensureState();oldRender()};
   const oldHistoryClick=E.history.onclick;E.history.onclick=()=>{oldHistoryClick();E.historyList.querySelectorAll('.history-item').forEach((row,i)=>{const h=state.history[i];if(h?.type==='win'&&h.scorer){const detail=row.querySelector('span');detail.textContent=`${h.scorer} scored at ${h.time}`}})};
+  const oldUndoClick=E.undo.onclick;E.undo.onclick=()=>{const eventId=state.history?.[0]?.seasonEventId;oldUndoClick();if(eventId)window.PlayNextSeason?.undoGoal(eventId)};
 
-  injectUI();ensureState();E.aGoal.onclick=()=>openScorer(0);E.bGoal.onclick=()=>openScorer(1);
+  injectUI();ensureState();E.aGoal.onclick=()=>openScorer(0);E.bGoal.onclick=()=>openScorer(1);window.dispatchEvent(new Event('playnext:competition-ready'));
 })();

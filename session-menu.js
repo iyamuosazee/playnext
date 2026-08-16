@@ -31,4 +31,10 @@
   if(!document.querySelector('script[src="competition.js"]')){
     const script=document.createElement('script');script.src='competition.js';document.body.appendChild(script);
   }
+  if(!document.querySelector('link[href="season.css"]')){
+    const link=document.createElement('link');link.rel='stylesheet';link.href='season.css';document.head.appendChild(link);
+  }
+  if(!document.querySelector('script[src="season.js"]')){
+    const script=document.createElement('script');script.src='season.js';document.body.appendChild(script);
+  }
 })();
