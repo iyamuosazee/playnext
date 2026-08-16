@@ -62,7 +62,7 @@
   async function copyRecoveryCode(){const code=document.getElementById('recoveryCodeValue').textContent;try{await navigator.clipboard.writeText(code);toast('Recovery code copied')}catch{toast(code)}}
   async function restore(){
     const value=saved();if(!value)return;
-    try{const data=await rpc('get_season',{p_season_id:value.id,p_access_token:value.token}),row=Array.isArray(data)?data[0]:data;if(row&&row.status==='active'){season={id:row.season_id,token:value.token,name:row.season_name};await loadPlayers()}else persist(null)}catch{persist(null)}
+    try{const data=await rpc('get_season',{p_season_id:value.id,p_access_token:value.token}),row=Array.isArray(data)?data[0]:data;if(row&&row.status==='active'){season={id:row.season_id,token:value.token,name:row.season_name};await syncPendingGoals();await loadPlayers()}else persist(null)}catch{persist(null)}
   }
   async function loadPlayers(){
     if(!season)return;
@@ -72,9 +72,14 @@
   async function openLeaderboard(){
     const id=state.seasonId||season?.id;if(!id)return show('createSeasonModal');
     const target=document.getElementById('seasonBoardContent');target.innerHTML='<div class="empty-state">Loading…</div>';show('seasonBoardModal');
-    try{const rows=await rpc('get_season_leaderboard',{p_season_id:id})||[];document.getElementById('seasonBoardTitle').textContent=state.seasonName||season?.name||'Season goals';target.innerHTML=rows.length?`<table class="leader-table"><thead><tr><th>#</th><th>Player</th><th>Goals</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${rows.findIndex(x=>x.goals===p.goals)+1}</td><td><strong>${esc(p.player_name)}</strong></td><td><strong>${p.goals}</strong></td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No season goals recorded yet.</div>'}catch{target.innerHTML='<div class="empty-state">Could not load the season table.</div>'}
+    try{await syncPendingGoals();const rows=await rpc('get_season_leaderboard',{p_season_id:id})||[];document.getElementById('seasonBoardTitle').textContent=state.seasonName||season?.name||'Season goals';target.innerHTML=rows.length?`<table class="leader-table"><thead><tr><th>#</th><th>Player</th><th>Goals</th></tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${rows.findIndex(x=>x.goals===p.goals)+1}</td><td><strong>${esc(p.player_name)}</strong></td><td><strong>${p.goals}</strong></td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No season goals recorded yet.</div>'}catch{target.innerHTML='<div class="empty-state">Could not load the season table.</div>'}
   }
-  async function recordGoal(playerName,eventId){if(!season||!roomCode||!playerName)return;try{await rpc('record_season_goal',{p_season_id:season.id,p_access_token:season.token,p_session_code:roomCode,p_player_name:playerName,p_event_id:eventId});await loadPlayers()}catch{toast('Goal saved live, but season sync failed')}}
+  async function syncPendingGoals(){
+    if(!season||!roomCode||state.seasonId!==season.id||role!=='host')return;
+    const pending=(state.history||[]).filter(h=>h.type==='win'&&h.scorer&&h.seasonEventId);
+    for(const h of pending)await rpc('record_season_goal',{p_season_id:season.id,p_access_token:season.token,p_session_code:roomCode,p_player_name:h.scorer,p_event_id:h.seasonEventId});
+  }
+  async function recordGoal(playerName,eventId){if(!season)await restore();if(!season||!roomCode||!playerName)return toast('Goal saved live; season sync will retry');try{await rpc('record_season_goal',{p_season_id:season.id,p_access_token:season.token,p_session_code:roomCode,p_player_name:playerName,p_event_id:eventId});await loadPlayers()}catch{toast('Goal saved live; season sync will retry')}}
   async function undoGoal(eventId){if(!season||!eventId)return;try{await rpc('undo_season_goal',{p_season_id:season.id,p_access_token:season.token,p_event_id:eventId});await loadPlayers()}catch{toast('Live undo worked, but season sync failed')}}
   window.PlayNextSeason={recordGoal,undoGoal,openLeaderboard};inject();restore().then(()=>{renderSeasonCard();addLiveButton()});
 })();
