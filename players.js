@@ -20,8 +20,9 @@
     }).filter(x=>x.name)
   }
   E.start.onclick=async()=>{
-    const entries=setupTeams();
-    if(entries.length<4)return toast('Add at least 4 teams');
+    let entries=setupTeams();
+    while(entries.length<4&&E.inputs.children.length<10){addTeam();entries=setupTeams()}
+    if(entries.length<4)return toast('Give at least 4 teams a name');
     if(new Set(entries.map(x=>x.name.toLowerCase())).size!==entries.length)return toast('Team names must be unique');
     state.teams=entries.map(({name,players,i})=>({id:crypto.randomUUID(),name,color:colors[i%colors.length],players,games:0,wins:0,draws:0,streak:0,bestStreak:0}));
     state.playing=state.teams.slice(0,2);state.queue=state.teams.slice(2);state.duration=+E.duration.value;state.remaining=state.duration;state.history=[];state.snapshots=[];startClock(false);
