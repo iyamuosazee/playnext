@@ -28,6 +28,7 @@
     if(new Set(entries.map(x=>x.name.toLowerCase())).size!==entries.length)return toast('Team names must be unique');
     const playerNames=entries.flatMap(x=>x.players).map(x=>x.toLocaleLowerCase());
     if(new Set(playerNames).size!==playerNames.length)return toast('A player can only be assigned to one team');
+    state.players=[];
     state.teams=entries.map(({name,players,i})=>({id:crypto.randomUUID(),name,color:colors[i%colors.length],players,games:0,wins:0,draws:0,streak:0,bestStreak:0}));
     state.playing=state.teams.slice(0,2);state.queue=state.teams.slice(2);state.duration=+E.duration.value;state.remaining=state.duration;state.history=[];state.snapshots=[];startClock(false);
     let {data,error}=await sb.rpc('create_session',{p_name:'Sunday Football',p_duration_seconds:state.duration,p_players_per_team:+E.players.value,p_state:publicState()});
