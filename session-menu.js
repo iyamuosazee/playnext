@@ -10,7 +10,16 @@
   document.getElementById('menuRecap').onclick=()=>{close();window.PlayNextRecap?.show?.()};
   document.getElementById('menuCohost').onclick=async()=>{if(typeof role==='undefined'||role!=='host'||hostKind!=='primary')return;const button=document.getElementById('menuCohost');button.disabled=true;try{const {data,error}=await sb.rpc('create_cohost_invite',{p_code:roomCode,p_host_token:hostToken});if(error)throw error;const token=Array.isArray(data)?data[0]:data,link=`${location.origin}${location.pathname}?room=${roomCode}&cohost=${token}`;close();if(navigator.share)await navigator.share({title:'PlayNext co-host invitation',text:`Help host PlayNext room ${roomCode}. This private link gives live match controls.`,url:link});else{await navigator.clipboard.writeText(link);toast('Co-host invitation copied')}}catch(error){if(error?.name!=='AbortError')toast('Could not create co-host invitation')}finally{button.disabled=false}};
   document.getElementById('menuAlerts').onclick=()=>{close();const alertButton=document.getElementById('matchAlertSetting')||document.getElementById('alertSettingsBtn');if(alertButton)alertButton.click();else toast('Match alerts are controlled from the host alert setting')};
-  document.getElementById('menuEndMatchday').onclick=async()=>{if(typeof role==='undefined'||role!=='host')return;close();if(!confirm('End Match Day? This closes the live room immediately and cannot be resumed. Season records will remain saved.'))return;const button=document.getElementById('menuEndMatchday');button.disabled=true;try{await window.PlayNextSeason?.syncPendingGoals?.();if(typeof pauseClock==='function')pauseClock(false);const {error}=await sb.rpc('update_session_state',{p_code:roomCode,p_host_token:hostToken,p_state:publicState(),p_status:'ended'});if(error)throw error;window.PlayNextRecap?.show?.();toast('Match Day ended — recap ready');setTimeout(()=>{localStorage.removeItem('playnext-host')},200)}catch{button.disabled=false;toast('Could not end Match Day — try again')}};
+  document.getElementById('menuEndMatchday').onclick=async()=>{
+    if(typeof role==='undefined'||role!=='host')return;close();if(!confirm('End Match Day? This closes the live room immediately and cannot be resumed. Season records will remain saved.'))return;
+    const button=document.getElementById('menuEndMatchday');button.disabled=true;
+    try{
+      await window.PlayNextSeason?.syncPendingGoals?.();if(typeof pauseClock==='function')pauseClock(false);
+      if(channel){try{await sb.removeChannel(channel)}catch{}channel=null}
+      const {error}=await sb.rpc('update_session_state',{p_code:roomCode,p_host_token:hostToken,p_state:publicState(),p_status:'ended'});if(error)throw error;
+      window.__playnextMatchdayEnded=true;window.PlayNextRecap?.show?.();toast('Match Day ended — recap ready');
+    }catch{button.disabled=false;toast('Could not end Match Day — try again')}
+  };
   document.getElementById('menuLeave').onclick=()=>{close();const message=typeof role!=='undefined'&&role==='host'?'Leave this hosted session? The live room will remain until it expires.':'Leave this room?';if(confirm(message)){localStorage.removeItem('playnext-host');location.href=location.pathname}};
 })();
 
