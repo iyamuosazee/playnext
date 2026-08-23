@@ -22,9 +22,8 @@
   E.start.onclick=async()=>{
     if(sessionStarting)return;sessionStarting=true;E.start.disabled=true;const originalLabel=E.start.innerHTML;E.start.innerHTML='Starting…';
     try{
-    let entries=setupTeams();
-    while(entries.length<4&&E.inputs.children.length<10){addTeam();entries=setupTeams()}
-    if(entries.length<4)return toast('Give at least 4 teams a name');
+    const entries=setupTeams();
+    if(entries.length<2)return toast('Give at least 2 teams a name');
     if(new Set(entries.map(x=>x.name.toLowerCase())).size!==entries.length)return toast('Team names must be unique');
     const playerNames=entries.flatMap(x=>x.players).map(x=>x.toLocaleLowerCase());
     if(new Set(playerNames).size!==playerNames.length)return toast('A player can only be assigned to one team');
