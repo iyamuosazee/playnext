@@ -45,11 +45,11 @@
   addBtn.onclick=addPlayer;newName.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addPlayer()}};
 
   function shuffle(arr){const out=[...arr];for(let i=out.length-1;i>0;i--){const a=new Uint32Array(1);crypto.getRandomValues(a);const j=a[0]%(i+1);[out[i],out[j]]=[out[j],out[i]]}return out}
-  function ensureTeamRows(teamCount){while(E.inputs.children.length<teamCount)addTeam();while(E.inputs.children.length>teamCount&&E.inputs.children.length>4)E.inputs.lastElementChild?.remove();if(typeof window.dispatchEvent==='function')window.dispatchEvent(new Event('resize'))}
+  function ensureTeamRows(teamCount){while(E.inputs.children.length<teamCount)addTeam();while(E.inputs.children.length>teamCount&&E.inputs.children.length>2)E.inputs.lastElementChild?.remove();if(typeof window.dispatchEvent==='function')window.dispatchEvent(new Event('resize'))}
   function fillTeams(){
     const players=selected();
     const per=Math.max(1,+(E.players?.value||3));
-    if(players.length<per*4)return toast(`Select at least ${per*4} players for 4 teams`);
+    if(players.length<per*2)return toast(`Select at least ${per*2} players for 2 teams`);
     if(players.length%per!==0)return toast(`Select a multiple of ${per} players so every team is complete`);
     const mixed=shuffle(players);
     const teamCount=mixed.length/per;
